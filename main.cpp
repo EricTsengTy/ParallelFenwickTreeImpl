@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
 
     // Run sequential version
     {
-        FTree seq_tree(size);
+        FenwickTreeSequential seq_tree(size);
         auto start_time = std::chrono::steady_clock::now();
         
         for (int i = 0; i < num_operations; ++i) {
