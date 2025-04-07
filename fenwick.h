@@ -4,7 +4,6 @@
 #include <chrono>
 #include <mutex>
 #include <shared_mutex>
-#include <atomic>
 #include <omp.h>
 
 class FenwickTreeBase {
@@ -40,6 +39,7 @@ class FenwickTreeSequential : FenwickTreeBase {
 class FenwickTreeLocked : FenwickTreeBase {
   private:
     std::vector<int> bits;
+    std::mutex mutex;
 
   public:
     FenwickTreeLocked(int n) : bits(n + 1) {
@@ -49,6 +49,7 @@ class FenwickTreeLocked : FenwickTreeBase {
     // Thread-safe add operation with local lock
     void add(int x, int val) {
         ++x;
+        std::unique_lock<std::mutex> lock(mutex);
         // Update the tree
         for (; x < bits.size(); x += x & -x) {
             bits[x] += val;
