@@ -39,19 +39,27 @@ class FenwickTreeSequential : FenwickTreeBase {
 class FenwickTreeLocked : FenwickTreeBase {
   private:
     std::vector<int> bits;
-    std::mutex mutex;
+    std::vector<std::mutex> mutexes;
 
   public:
-    FenwickTreeLocked(int n) : bits(n + 1) {
+    FenwickTreeLocked(int n) : bits(n + 1), mutexes(n + 1) {
         // Already initialized to 0 in constructor
     }
 
     // Thread-safe add operation with local lock
     void add(int x, int val) {
+        // TODO: make this variable more scalable
+        const int lock_size = 16384;
         ++x;
-        std::unique_lock<std::mutex> lock(mutex);
         // Update the tree
+        std::unique_lock<std::mutex> lock(mutexes[x / lock_size]);
+        int prev_x = x;
         for (; x < bits.size(); x += x & -x) {
+            if (prev_x / lock_size != x / lock_size) {
+                lock.unlock();
+                lock = std::unique_lock<std::mutex>(mutexes[x / lock_size]);
+                prev_x = x;
+            }
             bits[x] += val;
         }
     }
