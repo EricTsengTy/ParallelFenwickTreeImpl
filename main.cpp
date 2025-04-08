@@ -12,12 +12,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    size_t size = 16384;
-    size_t batch_size = 1024;
-    size_t num_batches = 16384;
+    size_t size = 1 << 20;
+    size_t batch_size = 16384;
+    size_t num_batches = 1024;
     size_t num_operations = batch_size * num_batches;
     
-    Generator generator(size);
+    Generator generator(size, 0);
     std::vector<Operation> operations(batch_size);
 
     // Run sequential version
@@ -30,14 +30,15 @@ int main(int argc, char* argv[]) {
                 operations[i] = generator.next();
             }
 
-            for (int i = 0; i < batch_size; ++i) {
-                const auto& op = operations[i];
-                if (op.command == 'a') {
-                    fenwick_tree.add(op.index, op.value);
-                } else {
-                    int result = fenwick_tree.sum(op.index);
-                }
-            }
+            // for (int i = 0; i < batch_size; ++i) {
+            //     const auto& op = operations[i];
+            //     if (op.command == 'a') {
+            //         fenwick_tree.add(op.index, op.value);
+            //     } else {
+            //         int result = fenwick_tree.sum(op.index);
+            //     }
+            // }
+            fenwick_tree.batchAdd(operations);
         }
 
         
@@ -77,6 +78,39 @@ int main(int argc, char* argv[]) {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
         
         std::cout << "Atomic with Padding Performance:" << std::endl;
+        std::cout << "Total operations: " << num_operations << std::endl;
+        std::cout << "Total execution time: " << duration.count() << " microseconds" << std::endl;
+        std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
+        std::cout << std::endl;
+    }
+
+    // Run pipeline version
+    if (argv[1][0] == 'p') {
+        omp_set_num_threads(2);
+        FenwickTreePipeline fenwick_tree(size, omp_get_max_threads());
+        auto start_time = std::chrono::steady_clock::now();
+        
+        for (size_t batch_start = 0; batch_start < num_operations; batch_start += batch_size) {
+            for (int i = 0; i < batch_size; ++i) {
+                operations[i] = generator.next();
+            }
+
+            // for (int i = 0; i < batch_size; ++i) {
+            //     const auto& op = operations[i];
+            //     if (op.command == 'a') {
+            //         fenwick_tree.add(op.index, op.value);
+            //     } else {
+            //         int result = fenwick_tree.sum(op.index);
+            //     }
+            // }
+            fenwick_tree.batchAdd(operations);
+        }
+
+        
+        auto end_time = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+        
+        std::cout << "Sequential Performance:" << std::endl;
         std::cout << "Total operations: " << num_operations << std::endl;
         std::cout << "Total execution time: " << duration.count() << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;

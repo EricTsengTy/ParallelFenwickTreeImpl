@@ -1,3 +1,6 @@
+#ifndef GENERATOR_H
+#define GENERATOR_H
+
 #include <random>
 
 struct Operation {
@@ -40,3 +43,5 @@ class Generator {
         return op;
     }
 };
+
+#endif
