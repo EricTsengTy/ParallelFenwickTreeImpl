@@ -1,6 +1,7 @@
 #ifndef FENWICK_H
 #define FENWICK_H
 
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -26,7 +27,7 @@ class FenwickTreeSequential : FenwickTreeBase {
     FenwickTreeSequential(int n):bits(n + 1, 0){}
 
     void add(int x, int val) override {
-        for (++x; x < bits.size(); x += x & -x) {
+        for (++x; x < (int)bits.size(); x += x & -x) {
             bits[x] += val;
         }
     }
@@ -44,7 +45,7 @@ class FenwickTreeSequential : FenwickTreeBase {
             int x = operation.index;
             int val = operation.value;
 
-            for (++x; x < bits.size(); x += x & -x) {
+            for (++x; x < (int)bits.size(); x += x & -x) {
                 bits[x] += val;
             }
         }
@@ -70,7 +71,7 @@ class FenwickTreeLocked : FenwickTreeBase {
         // Update the tree
         std::unique_lock<std::mutex> lock(mutexes[x / lock_size]);
         int prev_x = x;
-        for (; x < bits.size(); x += x & -x) {
+        for (; x < (int)bits.size(); x += x & -x) {
             if (prev_x / lock_size != x / lock_size) {
                 lock.unlock();
                 lock = std::unique_lock<std::mutex>(mutexes[x / lock_size]);
@@ -96,16 +97,46 @@ class FenwickTreePipeline : FenwickTreeBase {
     std::vector<int> bits;
     std::vector<std::pair<int, int>> ranges;
 
+    void initialize_ranges(int n, int num_threads) {
+        std::vector<ulong> dp(n + 1);
+        ulong total = 0;
+        for (int x = 1; x <= n; ++x) {
+            ++dp[x];
+            total += dp[x];
+
+            int next_x = x;
+            next_x += next_x & -next_x;
+            if (next_x <= n) {
+                dp[next_x] += dp[x];
+            }
+        }
+
+        ulong average = total / num_threads;
+        int cur = 1;
+
+        for (int i = 0; i != num_threads; ++i) {
+            ulong thread_total = 0;
+            ranges[i].first = cur;
+            while (cur < (int)bits.size() && thread_total < average) {
+                thread_total += (ulong)dp[cur];
+                ++cur;
+            }
+            while (cur < (int)bits.size() && cur % 64 != 0) {
+                ++cur;
+            }
+            ranges[i].second = cur;
+        }
+
+        ranges.back().second = bits.size();
+    }
+
   public:
     FenwickTreePipeline(int n, int num_threads):bits(n + 1, 0), ranges(num_threads) {
-        for (int i = 0; i != num_threads; ++i) {
-            ranges[i].first = n / num_threads * i + 1;
-            ranges[i].second = std::min(n / num_threads * (i + 1) + 1, n + 1);
-        }
+        initialize_ranges(n, num_threads);
     }
 
     void add(int x, int val) override {
-        for (++x; x < bits.size(); x += x & -x) {
+        for (++x; x < (int)bits.size(); x += x & -x) {
             bits[x] += val;
         }
     }
@@ -154,6 +185,23 @@ class FenwickTreePipeline : FenwickTreeBase {
                 }
             }
         }
+    }
+
+    void statistics() {
+        std::vector<std::pair<int, int>> values;
+        long total = 0;
+        for (int i = 1; i < (int)bits.size(); ++i) {
+            values.emplace_back(bits[i], i);
+            total += (long) bits[i];
+        }
+
+        std::sort(values.begin(), values.end(), std::greater<std::pair<int, int>>());
+        for (int i = 0; i < (int)values.size() && i < 20; ++i) {
+            std::cerr << values[i].second << ' ' << values[i].first << '\n';
+        }
+
+        std::cerr << "Total: " << total << '\n';
+        std::cerr << "Average: " << (double)total / bits.size() << '\n';
     }
 };
 
