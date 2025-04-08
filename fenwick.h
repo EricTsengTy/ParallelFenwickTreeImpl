@@ -122,14 +122,35 @@ class FenwickTreePipeline : FenwickTreeBase {
         #pragma omp parallel
         {
             int t = omp_get_thread_num();
+            auto &[lower, upper] = ranges[t];
+
             for (auto &operation : operations) {
                 int x = operation.index;
                 int val = operation.value;
 
-                for (++x; x < ranges[t].second; x += x & -x) {
-                    if (x >= ranges[t].first) {
-                        bits[x] += val;
+                /** 
+                 * Compute the smallest index derived from `x` that lies 
+                 * within the target range.
+                 *    
+                 * This avoids having each thread start from the original
+                 * `x` and loop through unnecessarily to locate their valid
+                 * range.
+                 */
+                ++x;
+                if (x < lower) {
+                    auto highest_diff_bit 
+                        = 0x8000000000000000ULL >> __builtin_clzll(x ^ lower);
+
+                    x |= highest_diff_bit;
+                    x &= ~(highest_diff_bit - 1);
+
+                    if (x < lower) {
+                        x += x & -x;
                     }
+                }
+
+                for (; x < upper; x += x & -x) {
+                    bits[x] += val;
                 }
             }
         }
