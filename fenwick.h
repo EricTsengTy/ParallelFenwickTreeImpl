@@ -219,15 +219,14 @@ class FenwickTreeLSync : public FenwickTreeBase {
     FenwickTreeLSync(int n) : bits(n + 1) {}
 
     // Thread-safe add operation with local lock
-    void add(int x, int val) {
-        ++x;
-        for (; x < (int)bits.size(); x += x & -x) {
+    void add(int x, int val) override {
+        for (++x; x < (int)bits.size(); x += x & -x) {
             bits[x].fetch_add(val);
         }
     }
 
     // Thread-safe sum operation (no locks needed with only 1 reader at a time)
-    int sum(int x) {
+    int sum(int x) override {
         int total = 0;
         for (++x; x > 0; x -= x & -x) {
             total += bits[x].load();

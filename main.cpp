@@ -208,7 +208,6 @@ int main(int argc, char* argv[]) {
             int seq_res = 0;
             int test_res = 0;
 
-            auto generating_start_time = std::chrono::steady_clock::now();
             for (size_t i = 0; i < batch_size; ++i) {
                 operations[i] = generator.next();
             }
@@ -217,33 +216,31 @@ int main(int argc, char* argv[]) {
             for (size_t i = 0; i < batch_size; ++i) {
                 const auto& op = operations[i];
                 if (op.command == 'a') {
-                    // std::cout << "a idx: " << op.value << std::endl;
                     base_tree->add(op.index, op.value);
                 } else {
-                    // std::cout << "idx: " << op.index << std::endl;
                     seq_res += base_tree->sum(op.index);
                 }
             }
             sequential_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
 
             start_time = std::chrono::steady_clock::now();
-            int left = 0;
-            for (int right = 0; right < batch_size; ++right) {
-                if (operations[right].command == 'q') {
-                    #pragma omp parallel for num_threads(omp_get_max_threads())
-                    for (int i = left; i < right; ++i) {
-                        const auto& op = operations[i];
-                        test_tree->add(op.index, op.value);
+            size_t left = 0;
+            for (size_t right = 0; right < batch_size; right++) {
+                const auto& op = operations[right];
+                if (op.command == 'q') {
+                    #pragma omp parallel for
+                    for (size_t i = left; i < right; ++i) {
+                        test_tree->add(operations[i].index, operations[i].value);                        
                     }
-                    test_res += test_tree->sum(operations[right].index);
+                    test_res += test_tree->sum(op.index);
                     left = right + 1;
                 }
             }
             test_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
-            // if (seq_res != test_res) {
-            //     std::cout << "output diff at batch: " << batch_start << " t: " << test_res << " s: " << seq_res << std::endl;
-            //     return -1;
-            // }
+            if (seq_res != test_res) {
+                std::cout << "output diff at batch: " << batch_start << " t: " << test_res << " s: " << seq_res << std::endl;
+                return -1;
+            }
         }
         
         std::cout << "Performance:" << std::endl;
