@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include <memory>
 #include <unistd.h>
 
 #include "fenwick.h"
@@ -23,10 +24,31 @@ void print_help(int argc, char *argv[]) {
     exit(1);  // Exit with error code
 }
 
+std::unique_ptr<FenwickTreeBase> CreateFenwickTree(const std::string& type, int n, size_t num_threads) {
+    if (type == "sequential") {
+        return std::make_unique<FenwickTreeSequential>(n);
+    }
+    if (type == "lock") {
+        return std::make_unique<FenwickTreeLocked>(n);
+    }
+    if (type == "pipeline") {
+        omp_set_num_threads(num_threads);
+        return std::make_unique<FenwickTreePipeline>(n, omp_get_max_threads());
+    }
+    if (type == "lazy") {
+        return std::make_unique<FenwickTreeLSync>(n);
+    }
+    if (type == "within") {
+        omp_set_num_threads(num_threads);
+        return std::make_unique<FenwickTreeLWithin>(n, omp_get_max_threads());
+    }
+    throw std::invalid_argument("Unknown tree type");
+}
+
 int main(int argc, char* argv[]) {
     std::string strategy = "sequential";
     size_t num_threads = 1;
-    size_t size = (1 << 20);
+    size_t size = (1 << 25);
     size_t batch_size = (1 << 16);
     size_t num_batches = 1024;
     size_t num_operations = batch_size * num_batches;
@@ -36,7 +58,7 @@ int main(int argc, char* argv[]) {
         switch (opt) {
             case 't':
                 strategy = optarg;
-                if (strategy != "sequential" && strategy != "lock" && strategy != "pipeline") {
+                if (strategy != "sequential" && strategy != "lock" && strategy != "pipeline" && strategy != "lazy" && strategy != "within") {
                     std::cerr << "Error: Invalid strategy. Must be 'sequential', 'lock', or 'pipeline'.\n";
                     print_help(argc, argv);
                 }
@@ -59,7 +81,7 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    Generator generator(size, 0);
+    Generator generator(size, 1);
     std::vector<Operation> operations(batch_size);
 
     // Run sequential version
@@ -79,7 +101,15 @@ int main(int argc, char* argv[]) {
                 generating_end_time - generating_start_time
             );
 
-            fenwick_tree.batchAdd(operations);
+            // fenwick_tree.batchAdd(operations);
+            for (size_t i = 0; i < batch_size; ++i) {
+                const auto& op = operations[i];
+                if (op.command == 'a') {
+                    fenwick_tree.add(op.index, op.value);
+                } else {
+                    int result = fenwick_tree.sum(op.index);
+                }
+            }
         }
         
         auto end_time = std::chrono::steady_clock::now();
@@ -164,6 +194,62 @@ int main(int argc, char* argv[]) {
         std::cout << "Total data generating time: " << generating_duration.count() << " microseconds" << std::endl;
         std::cout << "Total computation time: " << (duration - generating_duration).count() << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
+        std::cout << std::endl;
+    } else {
+        omp_set_num_threads(num_threads);
+        std::string base_strategy = "sequential";
+        std::unique_ptr<FenwickTreeBase> base_tree = CreateFenwickTree(base_strategy, size, num_threads);
+        std::unique_ptr<FenwickTreeBase> test_tree = CreateFenwickTree(strategy, size, num_threads);
+        double test_time = 0;
+        double sequential_time = 0;
+        auto start_time = std::chrono::steady_clock::now();
+
+        for (size_t batch_start = 0; batch_start < num_operations; batch_start += batch_size) {
+            int seq_res = 0;
+            int test_res = 0;
+
+            auto generating_start_time = std::chrono::steady_clock::now();
+            for (size_t i = 0; i < batch_size; ++i) {
+                operations[i] = generator.next();
+            }
+
+            start_time = std::chrono::steady_clock::now();
+            for (size_t i = 0; i < batch_size; ++i) {
+                const auto& op = operations[i];
+                if (op.command == 'a') {
+                    // std::cout << "a idx: " << op.value << std::endl;
+                    base_tree->add(op.index, op.value);
+                } else {
+                    // std::cout << "idx: " << op.index << std::endl;
+                    seq_res += base_tree->sum(op.index);
+                }
+            }
+            sequential_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
+
+            start_time = std::chrono::steady_clock::now();
+            int left = 0;
+            for (int right = 0; right < batch_size; ++right) {
+                if (operations[right].command == 'q') {
+                    #pragma omp parallel for num_threads(omp_get_max_threads())
+                    for (int i = left; i < right; ++i) {
+                        const auto& op = operations[i];
+                        test_tree->add(op.index, op.value);
+                    }
+                    test_res += test_tree->sum(operations[right].index);
+                    left = right + 1;
+                }
+            }
+            test_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
+            // if (seq_res != test_res) {
+            //     std::cout << "output diff at batch: " << batch_start << " t: " << test_res << " s: " << seq_res << std::endl;
+            //     return -1;
+            // }
+        }
+        
+        std::cout << "Performance:" << std::endl;
+        std::cout << "Total operations: " << num_operations << std::endl;
+        std::cout << "Seq time: " << sequential_time << " microseconds" << std::endl;
+        std::cout << "Test Algo time: " << test_time << " microseconds" << std::endl; 
         std::cout << std::endl;
     }
 
