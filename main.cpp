@@ -229,12 +229,16 @@ int main(int argc, char* argv[]) {
                 const auto& op = operations[right];
                 if (op.command == 'q') {
                     #pragma omp parallel for
-                    for (size_t i = left; i < right; ++i) {
+                    for (size_t i = left; i < right; i++) {
                         test_tree->add(operations[i].index, operations[i].value);                        
                     }
                     test_res += test_tree->sum(op.index);
                     left = right + 1;
                 }
+            }
+            #pragma omp parallel for
+            for (size_t i = left; i < batch_size; i++) {
+                test_tree->add(operations[i].index, operations[i].value);                        
             }
             test_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
             if (seq_res != test_res) {
