@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -O3 -fopenmp
+CXXFLAGS = -std=c++17 -Wall -O3 -fopenmp -Wall -Wextra
 
 all: fenwick
 

@@ -32,9 +32,12 @@ struct Task {
 class Scheduler {
     public:
     Scheduler(int num_workers, int tree_size, int batch_size)
-        : num_workers_(num_workers), tree_size_(tree_size) {
+        : num_workers_(num_workers), tree_size_(tree_size), batch_size_(batch_size), results_(batch_size + 1) {
         local_trees_.reserve(num_workers);
-        results_.resize(batch_size);
+        // results_.reserve(batch_size);
+        // for (int i = 0; i < num_workers; i++) {
+            // results_.emplace_back();
+        // }
 
         for (int i = 0; i < num_workers_; ++i) {
             local_trees_.emplace_back(FenwickTreeSequential(tree_size_));
@@ -54,8 +57,8 @@ class Scheduler {
     }
 
     void submit_update(int index, int value) {
-        Task task{TaskType::Update, index, value};
-        enqueue_task(std::move(task));
+        // Task task{TaskType::Update, index, value};
+        enqueue_task({TaskType::Update, index, value});
     }
 
     void submit_query(int index) {
@@ -66,27 +69,28 @@ class Scheduler {
 
     int validate_sum() {
         int res = 0;
-        for (int i = 0; i < results_.size(); i++) {
+        for (int i = 0; i < batch_size_; i++) {
             res += results_[i].load();
         }
     }
 
 private:
     std::vector<std::thread> workers_;
-    std::thread scheduler_thread_;
+    // std::thread scheduler_thread_;
     std::vector<std::unique_ptr<LockingQueue<Task>>> task_queues_;
     std::vector<std::atomic<int>> results_;
     std::vector<FenwickTreeSequential> local_trees_;
     int num_workers_;
     int tree_size_;
+    int batch_size_;
     std::atomic<int> round_robin_counter_ = 0;
 
-    void enqueue_task(Task&& task) {
+    void enqueue_task(Task task) {
         int worker_id = round_robin_counter_++ % num_workers_;
         task_queues_[worker_id]->push(std::move(task));
     }
 
-    void broadcast_task(Task&& task) {
+    void broadcast_task(const Task& task) {
         for (int i = 0; i < num_workers_; i++) {
             task_queues_[i]->push(task);
         }

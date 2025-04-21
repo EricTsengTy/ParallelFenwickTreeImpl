@@ -48,7 +48,7 @@ public:
         return queue_->empty();
     }
 
-    void push(T const& value) {
+    void push(T value) {
         {
             unique_lock<mutex> locker(m);
             // queue full now, wait for flush
@@ -56,7 +56,7 @@ public:
                 producer_cv_.wait(locker);
             }
 
-            queue_->push(value);
+            queue_->emplace(value);
         }
         consumer_cv_.notify_one();
     }
