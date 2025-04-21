@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "fenwick.h"
+#include "task_scheduler.h"
 #include "generator.h"
 
 void print_help(int argc, char *argv[]) {
@@ -58,7 +59,7 @@ int main(int argc, char* argv[]) {
         switch (opt) {
             case 't':
                 strategy = optarg;
-                if (strategy != "sequential" && strategy != "lock" && strategy != "pipeline" && strategy != "lazy" && strategy != "within") {
+                if (strategy != "sequential" && strategy != "lock" && strategy != "pipeline" && strategy != "lazy" && strategy != "within" && strategy != "parallel_task") {
                     std::cerr << "Error: Invalid strategy. Must be 'sequential', 'lock', or 'pipeline'.\n";
                     print_help(argc, argv);
                 }
@@ -195,7 +196,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Total computation time: " << (duration - generating_duration).count() << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
-    } else {
+    } else if (strategy == "lazy")  {
         omp_set_num_threads(num_threads);
         std::string base_strategy = "sequential";
         std::unique_ptr<FenwickTreeBase> base_tree = CreateFenwickTree(base_strategy, size, num_threads);
@@ -241,6 +242,56 @@ int main(int argc, char* argv[]) {
                 test_tree->add(operations[i].index, operations[i].value);                        
             }
             test_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
+            if (seq_res != test_res) {
+                std::cout << "output diff at batch: " << batch_start << " t: " << test_res << " s: " << seq_res << std::endl;
+                return -1;
+            }
+        }
+        
+        std::cout << "Performance:" << std::endl;
+        std::cout << "Total operations: " << num_operations << std::endl;
+        std::cout << "Seq time: " << sequential_time << " microseconds" << std::endl;
+        std::cout << "Test Algo time: " << test_time << " microseconds" << std::endl; 
+        std::cout << std::endl;
+    }  else if (strategy == "parallel_task")  {
+        std::string base_strategy = "sequential";
+        std::unique_ptr<FenwickTreeBase> base_tree = CreateFenwickTree(base_strategy, size, num_threads);
+
+        Scheduler scheduler = Scheduler(num_threads, size, batch_size);
+        double test_time = 0;
+        double sequential_time = 0;
+        auto start_time = std::chrono::steady_clock::now();
+
+        for (size_t batch_start = 0; batch_start < num_operations; batch_start += batch_size) {
+            int seq_res = 0;
+            int test_res = 0;
+
+            for (size_t i = 0; i < batch_size; ++i) {
+                operations[i] = generator.next();
+            }
+
+            start_time = std::chrono::steady_clock::now();
+            for (size_t i = 0; i < batch_size; ++i) {
+                const auto& op = operations[i];
+                if (op.command == 'a') {
+                    base_tree->add(op.index, op.value);
+                } else {
+                    seq_res += base_tree->sum(op.index);
+                }
+            }
+            sequential_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
+
+            start_time = std::chrono::steady_clock::now();
+            for (size_t i = 0; i < batch_size; ++i) {
+                const auto& op = operations[i];
+                if (op.command == 'a') {
+                    scheduler.submit_update(op.index, op.value);
+                } else {
+                    scheduler.submit_query(op.index);
+                }
+            }
+            test_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
+            test_res = scheduler.validate_sum();
             if (seq_res != test_res) {
                 std::cout << "output diff at batch: " << batch_start << " t: " << test_res << " s: " << seq_res << std::endl;
                 return -1;
