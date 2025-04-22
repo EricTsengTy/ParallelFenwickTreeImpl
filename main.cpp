@@ -14,7 +14,7 @@ void print_help(int argc, char *argv[]) {
               << "  -p <threads>      Number of OpenMP threads to use (default: available hardware threads)\n"
               << "  -b <size>         Batch size (default: 65536)\n"
               << "  -n <count>        Number of batches (default: 1024)\n"
-              << "  -s <size>         Total size of data (default: 1048576)\n"
+              << "  -s <size>         Total size of data (default: 1048575 = 2^10 - 1)\n"
               << "\n"
               << "Example:\n"
               << "  " << argv[0] << " -t parallel -p 4 -b 8192 -n 512 -s 2097152\n"
@@ -26,10 +26,9 @@ void print_help(int argc, char *argv[]) {
 int main(int argc, char* argv[]) {
     std::string strategy = "sequential";
     size_t num_threads = 1;
-    size_t size = (1 << 20);
+    size_t size = (1 << 20) - 1;
     size_t batch_size = (1 << 16);
     size_t num_batches = 1024;
-    size_t num_operations = batch_size * num_batches;
 
     int opt;
     while ((opt = getopt(argc, argv, "t:p:b:n:s:h")) != -1) {
@@ -58,6 +57,9 @@ int main(int argc, char* argv[]) {
                 print_help(argc, argv);
         }
     }
+
+    size_t num_operations = batch_size * num_batches;
+
     
     Generator generator(size, 0);
     std::vector<Operation> operations(batch_size);
@@ -90,6 +92,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Total execution time: " << duration.count() << " microseconds" << std::endl;
         std::cout << "Total data generating time: " << generating_duration.count() << " microseconds" << std::endl;
         std::cout << "Total computation time: " << (duration - generating_duration).count() << " microseconds" << std::endl;
+        std::cout << "Batch computation time: " << (duration - generating_duration).count() / num_batches << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
 
@@ -128,6 +131,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Total execution time: " << duration.count() << " microseconds" << std::endl;
         std::cout << "Total data generating time: " << generating_duration.count() << " microseconds" << std::endl;
         std::cout << "Total computation time: " << (duration - generating_duration).count() << " microseconds" << std::endl;
+        std::cout << "Batch computation time: " << (duration - generating_duration).count() / num_batches << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
 
@@ -151,18 +155,16 @@ int main(int argc, char* argv[]) {
 
             fenwick_tree.batchAdd(operations);
         }
-
         
         auto end_time = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 
-        // fenwick_tree.statistics();
-        
         std::cout << "Performance:" << std::endl;
         std::cout << "Total operations: " << num_operations << std::endl;
         std::cout << "Total execution time: " << duration.count() << " microseconds" << std::endl;
         std::cout << "Total data generating time: " << generating_duration.count() << " microseconds" << std::endl;
         std::cout << "Total computation time: " << (duration - generating_duration).count() << " microseconds" << std::endl;
+        std::cout << "Batch computation time: " << (duration - generating_duration).count() / num_batches << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
     }

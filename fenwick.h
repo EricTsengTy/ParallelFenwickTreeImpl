@@ -94,36 +94,47 @@ class FenwickTreeLocked : FenwickTreeBase {
 // Pipeline Fenwick Tree
 class FenwickTreePipeline : FenwickTreeBase {
   private:
+    int num_threads;
     std::vector<int> bits;
     std::vector<std::pair<int, int>> ranges;
+    std::vector<double> execution_times;
+    
+    // should be an even number
+    const int step_base = 32;
+    int step = step_base;
+    int fastest_tid = -1;
 
     void initialize_ranges(int n, int num_threads) {
-        std::vector<ulong> dp(n + 1);
-        ulong total = 0;
+        std::vector<long> dp(n + 1);
+        double total = 0;
         for (int x = 1; x <= n; ++x) {
             ++dp[x];
             total += dp[x];
 
             int next_x = x;
             next_x += next_x & -next_x;
-            if (next_x <= n) {
+            if (next_x <= n && x / 16 != next_x / 16) {
                 dp[next_x] += dp[x];
             }
         }
 
-        ulong average = total / num_threads;
+        // Split the internal array to several subarray and assign to each thread
+        double average = total / num_threads;
         int cur = 1;
 
         for (int i = 0; i != num_threads; ++i) {
-            ulong thread_total = 0;
+            double thread_total = 0;
             ranges[i].first = cur;
             while (cur < (int)bits.size() && thread_total < average) {
-                thread_total += (ulong)dp[cur];
+                thread_total += dp[cur];
                 ++cur;
             }
-            while (cur < (int)bits.size() && cur % 64 != 0) {
-                ++cur;
+
+            if (cur > ranges[i].first && labs(thread_total - average) > labs(thread_total - dp[cur - 1] - average)) {
+                --cur;
+                thread_total -= dp[cur];
             }
+
             ranges[i].second = cur;
         }
 
@@ -131,7 +142,11 @@ class FenwickTreePipeline : FenwickTreeBase {
     }
 
   public:
-    FenwickTreePipeline(int n, int num_threads):bits(n + 1, 0), ranges(num_threads) {
+    FenwickTreePipeline(int n, int num_threads):
+        num_threads(num_threads),
+        bits(n + 1, 0), 
+        ranges(num_threads), 
+        execution_times(num_threads) {
         initialize_ranges(n, num_threads);
     }
 
@@ -152,10 +167,11 @@ class FenwickTreePipeline : FenwickTreeBase {
     void batchAdd(std::vector<Operation> &operations) {
         #pragma omp parallel
         {
+            // double start_time = omp_get_wtime();
             int t = omp_get_thread_num();
-            auto &[lower, upper] = ranges[t];
+            const auto &[lower, upper] = ranges[t];
 
-            for (auto &operation : operations) {
+            for (const auto &operation : operations) {
                 int x = operation.index;
                 int val = operation.value;
 
@@ -180,10 +196,52 @@ class FenwickTreePipeline : FenwickTreeBase {
                     }
                 }
 
+                // [lower, upper)
                 for (; x < upper; x += x & -x) {
                     bits[x] += val;
                 }
             }
+            
+            // double end_time = omp_get_wtime();
+
+            // Semi-static scheduling: 
+            //   adjust ranges based on the execution results
+            #pragma omp single
+            {
+                if (ranges[t].first == 1) {
+                    if (ranges[t].second + step < (int)bits.size()) {
+                        ranges[t].second += step;
+                        ranges[t+1].first += step;
+                    }
+                } else if (ranges[t].second == (int)bits.size()) {
+                    if (ranges[t].first - step >= 1) {
+                        ranges[t].first -= step;
+                        ranges[t-1].second -= step;
+                    }
+                } else {
+                    int b = (ranges[t].first + ranges[t].second) & 1;
+                    if (b == 0 && ranges[t].first - step >= 1) {
+                        ranges[t].first -= step;
+                        ranges[t-1].second -= step;
+                    } else if (ranges[t].second + step < (int)bits.size()) {
+                        ranges[t].second += step;
+                        ranges[t+1].first += step;
+                    }
+                }
+            }
+            // execution_times[t] = end_time - start_time;
+
+            // #pragma omp critical
+            // {
+            //     std::cerr << "Thread " << t << ' ' << (end_time - start_time) * 1000000 << std::endl;
+            //     std::cerr << ranges[t].first << ' ' << ranges[t].second << std::endl;
+            // }
+        }
+    }
+
+    void printRanges() {
+        for (int i = 0; i != num_threads; ++i) {
+            std::cerr << "Thread " << i << ' ' << ranges[i].first << ' ' << ranges[i].second << '\n';
         }
     }
 
