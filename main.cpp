@@ -39,17 +39,13 @@ std::unique_ptr<FenwickTreeBase> CreateFenwickTree(const std::string& type, int 
     if (type == "lazy") {
         return std::make_unique<FenwickTreeLSync>(n);
     }
-    if (type == "within") {
-        omp_set_num_threads(num_threads);
-        return std::make_unique<FenwickTreeLWithin>(n, omp_get_max_threads());
-    }
     throw std::invalid_argument("Unknown tree type");
 }
 
 int main(int argc, char* argv[]) {
     std::string strategy = "sequential";
     size_t num_threads = 1;
-    size_t size = (1 << 25);
+    size_t size = (1 << 20);
     size_t batch_size = (1 << 16);
     size_t num_batches = 1024;
     size_t num_operations = batch_size * num_batches;
@@ -59,7 +55,7 @@ int main(int argc, char* argv[]) {
         switch (opt) {
             case 't':
                 strategy = optarg;
-                if (strategy != "sequential" && strategy != "lock" && strategy != "pipeline" && strategy != "lazy" && strategy != "within" && strategy != "parallel_task") {
+                if (strategy != "sequential" && strategy != "lock" && strategy != "pipeline" && strategy != "lazy" && strategy != "parallel_task") {
                     std::cerr << "Error: Invalid strategy. Must be 'sequential', 'lock', or 'pipeline'.\n";
                     print_help(argc, argv);
                 }
@@ -256,8 +252,8 @@ int main(int argc, char* argv[]) {
     }  else if (strategy == "parallel_task")  {
         std::string base_strategy = "sequential";
         std::unique_ptr<FenwickTreeBase> base_tree = CreateFenwickTree(base_strategy, size, num_threads);
+        Scheduler scheduler = Scheduler(num_threads - 1, size, batch_size);
 
-        Scheduler scheduler = Scheduler(num_threads, size, batch_size);
         double test_time = 0;
         double sequential_time = 0;
         auto start_time = std::chrono::steady_clock::now();
@@ -281,15 +277,17 @@ int main(int argc, char* argv[]) {
             }
             sequential_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
 
-            start_time = std::chrono::steady_clock::now();
+            scheduler.init();
+            start_time = std::chrono::steady_clock::now();  
             for (size_t i = 0; i < batch_size; ++i) {
                 const auto& op = operations[i];
                 if (op.command == 'a') {
                     scheduler.submit_update(op.index, op.value);
                 } else {
-                    scheduler.submit_query(op.index);
+                    scheduler.submit_query(op.index, i);
                 }
             }
+            scheduler.sync();
             test_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
             test_res = scheduler.validate_sum();
             if (seq_res != test_res) {
@@ -297,6 +295,7 @@ int main(int argc, char* argv[]) {
                 return -1;
             }
         }
+        scheduler.shutdown();
         
         std::cout << "Performance:" << std::endl;
         std::cout << "Total operations: " << num_operations << std::endl;
