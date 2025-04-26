@@ -114,10 +114,10 @@ class FenwickTreePipeline : FenwickTreeBase {
         }
 
         // Split the internal array to several subarray and assign to each thread
-        double average = total / num_threads;
         int cur = 1;
 
         for (int i = 0; i != num_threads; ++i) {
+            double average = total / (num_threads - i);
             double thread_total = 0;
             ranges[i].first = cur;
             while (cur < (int)bits.size() && thread_total < average) {
@@ -125,12 +125,13 @@ class FenwickTreePipeline : FenwickTreeBase {
                 ++cur;
             }
 
-            if (cur > ranges[i].first && labs(thread_total - average) > labs(thread_total - dp[cur - 1] - average)) {
+            if (cur > ranges[i].first && labs(thread_total - average) > labs(thread_total - dp[cur - 1] - average) && cur > ranges[i].first + 1) {
                 --cur;
                 thread_total -= dp[cur];
             }
 
             ranges[i].second = cur;
+            total -= thread_total;
         }
 
         ranges.back().second = bits.size();

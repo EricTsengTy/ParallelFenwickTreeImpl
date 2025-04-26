@@ -29,7 +29,7 @@ void print_help(int argc, char *argv[]) {
 int main(int argc, char* argv[]) {
     std::string strategy = "sequential";
     size_t num_threads = 1;
-    size_t size = (1 << 20) - 1;
+    size_t size = (1 << 20);
     size_t batch_size = (1 << 16);
     size_t num_batches = 1024;
 
