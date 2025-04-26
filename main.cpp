@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
         switch (opt) {
             case 't':
                 strategy = optarg;
-                if (strategy != "sequential" && strategy != "lock" && strategy != "pipeline" && strategy != "lazy" && strategy != "parallel_task") {
+                if (strategy != "sequential" && strategy != "lock" && strategy != "pipeline" && strategy != "lazy" && strategy != "parallel_task" && strategy != "dec_parallel_task") {
                     std::cerr << "Error: Invalid strategy. Must be 'sequential', 'lock', or 'pipeline'.\n";
                     print_help(argc, argv);
                 }
@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    Generator generator(size, 1);
+    Generator generator(size, 100);
     std::vector<Operation> operations(batch_size);
 
     // Run sequential version
@@ -252,10 +252,11 @@ int main(int argc, char* argv[]) {
     }  else if (strategy == "parallel_task")  {
         std::string base_strategy = "sequential";
         std::unique_ptr<FenwickTreeBase> base_tree = CreateFenwickTree(base_strategy, size, num_threads);
-        Scheduler scheduler = Scheduler(num_threads - 1, size, batch_size);
+        LockFreeScheduler scheduler = LockFreeScheduler(num_threads - 1, size, batch_size);
 
         double test_time = 0;
         double sequential_time = 0;
+        double schedule_time = 0;
         auto start_time = std::chrono::steady_clock::now();
 
         for (size_t batch_start = 0; batch_start < num_operations; batch_start += batch_size) {
@@ -287,6 +288,8 @@ int main(int argc, char* argv[]) {
                     scheduler.submit_query(op.index, i);
                 }
             }
+            schedule_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count(); 
+
             scheduler.sync();
             test_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
             test_res = scheduler.validate_sum();
@@ -296,6 +299,55 @@ int main(int argc, char* argv[]) {
             }
         }
         scheduler.shutdown();
+        
+        std::cout << "Performance:" << std::endl;
+        std::cout << "Total operations: " << num_operations << std::endl;
+        std::cout << "Seq time: " << sequential_time << " microseconds" << std::endl;
+        std::cout << "Test Algo time: " << test_time << " microseconds" << std::endl; 
+        std::cout << "Schedule time: " << schedule_time << " microseconds" << std::endl; 
+        std::cout << std::endl;
+    } else if (strategy == "dec_parallel_task")  {
+        std::string base_strategy = "sequential";
+        std::unique_ptr<FenwickTreeBase> base_tree = CreateFenwickTree(base_strategy, size, num_threads);
+        std::vector<FenwickTreeSequential> local_trees;
+        local_trees.reserve(num_threads - 1);
+        for (int i = 0; i < num_threads; ++i) {
+            local_trees.emplace_back(FenwickTreeSequential(size));
+        }
+
+        double test_time = 0;
+        double sequential_time = 0;
+        auto start_time = std::chrono::steady_clock::now();
+
+        for (size_t batch_start = 0; batch_start < num_operations; batch_start += batch_size) {
+            int seq_res = 0;
+            int test_res = 0;
+
+            for (size_t i = 0; i < batch_size; ++i) {
+                operations[i] = generator.next();
+            }
+
+            start_time = std::chrono::steady_clock::now();
+            for (size_t i = 0; i < batch_size; ++i) {
+                const auto& op = operations[i];
+                if (op.command == 'a') {
+                    base_tree->add(op.index, op.value);
+                } else {
+                    seq_res += base_tree->sum(op.index);
+                }
+            }
+            sequential_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
+
+            start_time = std::chrono::steady_clock::now();
+            DecentralizedScheduler scheduler = DecentralizedScheduler(num_threads - 1, batch_size, operations, local_trees);
+            scheduler.sync();
+            test_time += std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start_time).count();
+            test_res = scheduler.validate_sum();
+            if (seq_res != test_res) {
+                std::cout << "output diff at batch: " << batch_start << " t: " << test_res << " s: " << seq_res << std::endl;
+                return -1;
+            }
+        }
         
         std::cout << "Performance:" << std::endl;
         std::cout << "Total operations: " << num_operations << std::endl;

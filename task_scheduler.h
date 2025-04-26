@@ -19,6 +19,10 @@
 #include <sched.h>    // for CPU_SET, cpu_set_t
 
 #include "fenwick.h"
+#include "readerwriterqueue.h"
+#include "generator.h"
+
+using namespace moodycamel;
 
 enum class TaskType { Update, Query, Sync, Finish };
 
@@ -153,4 +157,147 @@ private:
     }
 };
 
+class LockFreeScheduler {
+    public:
+    LockFreeScheduler(int num_workers, int tree_size, int batch_size)
+        : num_workers_(num_workers), tree_size_(tree_size), batch_size_(batch_size), results_(batch_size) {
+        local_trees_.reserve(num_workers);
+        task_queues_.reserve(num_workers);
+
+        for (int i = 0; i < num_workers_; ++i) {
+            local_trees_.emplace_back(FenwickTreeSequential(tree_size_));
+            workers_.emplace_back(&LockFreeScheduler::worker_loop, this, i, i+1);
+            task_queues_.emplace_back(BlockingReaderWriterQueue<Task>(100));
+        }
+    }
+
+    void init() {
+        for (auto& val : results_) {
+            val.store(0, std::memory_order_relaxed);
+        }
+        sync_ = 0;
+    }
+
+    void submit_update(int index, int value) {
+        enqueue_task({TaskType::Update, index, value});
+    }
+
+    void submit_query(int index, int batch_id) {
+        broadcast_task({TaskType::Query, index, batch_id});
+    }
+
+    void sync() {
+        broadcast_task({TaskType::Sync, 0, 0});
+        while (sync_.load() != num_workers_);
+        return;
+    }
+
+    void shutdown() {
+        broadcast_task({TaskType::Finish, 0, 0});
+        for (auto& t : workers_) {
+            t.join();
+        }
+    }
+
+    int validate_sum() {
+        int res = 0;
+        for (int i = 0; i < batch_size_; i++) {
+            res += results_[i].load();
+        }
+        return res;
+    }
+
+private:
+    std::vector<std::thread> workers_;
+    std::vector<BlockingReaderWriterQueue<Task>> task_queues_;
+    std::vector<std::atomic<int>> results_;
+    std::vector<FenwickTreeSequential> local_trees_;
+    std::atomic<int> sync_ = 0;
+    int num_workers_;
+    int tree_size_;
+    int batch_size_;
+    int counter_ = 0;
+
+    void enqueue_task(Task task) {
+        int worker_id = counter_++ % num_workers_;
+        auto& q = task_queues_[worker_id];
+        q.enqueue(task);
+    }
+
+    void broadcast_task(Task task) {
+        for (int i = 0; i < num_workers_; ++i) {
+            auto& q = task_queues_[i];
+            q.enqueue(task);
+        }
+    }
+
+    void worker_loop(int worker_id, int core_id) {
+        pin_thread_to_core(core_id);
+
+        auto& q = task_queues_[worker_id];
+        while (true) {
+            Task task;
+            q.wait_dequeue(task);
+
+            if (task.type == TaskType::Update) {
+                local_trees_[worker_id].add(task.index, task.value);
+            } else if (task.type == TaskType::Query) {
+                int result = local_trees_[worker_id].sum(task.index);
+                results_[task.value].fetch_add(result, std::memory_order_relaxed);
+            } else if (task.type == TaskType::Sync) {
+                sync_++;
+            } else if (task.type == TaskType::Finish) {
+                return;
+            }
+        }
+    }
+};
+
+class DecentralizedScheduler {
+    public:
+    DecentralizedScheduler(int num_workers, int batch_size, 
+        std::vector<Operation>& operations, std::vector<FenwickTreeSequential>& local_trees)
+        : num_workers_(num_workers), batch_size_(batch_size), results_(batch_size) {
+        for (int i = 0; i < num_workers_; ++i) {
+            workers_.emplace_back(&DecentralizedScheduler::worker_loop, this, i, i+1, std::ref(operations), std::ref(local_trees[i]));
+        }
+    }
+
+    void sync() {
+        for (auto& t : workers_) {
+            t.join();
+        }
+    }
+
+    int validate_sum() {
+        int res = 0;
+        for (int i = 0; i < batch_size_; i++) {
+            res += results_[i].load();
+        }
+        return res;
+    }
+
+private:
+    std::vector<std::thread> workers_;
+    std::vector<std::atomic<int>> results_;
+    int num_workers_;
+    int batch_size_;
+
+    void worker_loop(int worker_id, int core_id, std::vector<Operation>& operations, FenwickTreeSequential& local_tree) {
+        pin_thread_to_core(core_id);
+
+        int counter = 0;
+        for (size_t i = 0; i < batch_size_; ++i) {
+            const auto& op = operations[i];
+            if (op.command == 'a') {
+                if (counter++ % num_workers_ == worker_id) {
+                    local_tree.add(op.index, op.value);
+                }
+            } else {
+                int result = local_tree.sum(op.index);
+                results_[i].fetch_add(result, std::memory_order_relaxed);
+            }
+        }
+    }
+};
 #endif
