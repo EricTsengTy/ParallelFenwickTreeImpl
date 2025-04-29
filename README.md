@@ -36,14 +36,14 @@ Options:
   -s <size>         Total size of data (default: 1048575 = 2^10 - 1)
 
 Strategies:
-  sequential, lock, pipeline-fixed-size, pipeline-access-aware, 
-  pipeline-semi-static, pipeline-aggregate, lazy, central_scheduler, 
-  lockfree_scheduler, pure_parallel, query_percentage_lazy, 
-  query_percentage_pure
+  sequential, lock, model-parallel-fixed-size, model-parallel-access-aware, 
+  model-parallel-semi-static, model-parallel-aggregate, lazy, 
+  central_scheduler, lockfree_scheduler, pure_parallel, 
+  query_percentage_lazy, query_percentage_pure
 
 Examples:
-  ./fenwick -t parallel -p 4 -b 8192 -n 512 -s 2097152
-  ./fenwick -t pipeline -p 8 -b 8192 -n 2048 -s 2097152
+  ./fenwick -t model-parallel-fixed-size -p 4 -b 8192 -n 512 -s 2097152
+  ./fenwick -t model-parallel-access-aware -p 8 -b 8192 -n 2048 -s 2097152
 ```
 
 ## Benchmark
