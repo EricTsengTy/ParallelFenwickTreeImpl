@@ -13,3 +13,6 @@ clean:
 	rm -f fenwick
 
 .PHONY: all run clean
+
+test:
+	

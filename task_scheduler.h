@@ -99,15 +99,15 @@ class Scheduler {
     }
 
 private:
+    int num_workers_;
+    int tree_size_;
+    int batch_size_;
+    int counter_ = 0;
     std::vector<std::thread> workers_;
     std::vector<std::unique_ptr<TaskQueue>> task_queues_;
     std::vector<std::atomic<int>> results_;
     std::vector<FenwickTreeSequential> local_trees_;
     std::atomic<int> sync_ = 0;
-    int num_workers_;
-    int tree_size_;
-    int batch_size_;
-    int counter_ = 0;
 
     void enqueue_task(Task task) {
         int worker_id = counter_++ % num_workers_;
@@ -208,15 +208,15 @@ class LockFreeScheduler {
     }
 
 private:
+    int num_workers_;
+    int tree_size_;
+    int batch_size_;
+    int counter_ = 0;
     std::vector<std::thread> workers_;
     std::vector<BlockingReaderWriterQueue<Task>> task_queues_;
     std::vector<std::atomic<int>> results_;
     std::vector<FenwickTreeSequential> local_trees_;
     std::atomic<int> sync_ = 0;
-    int num_workers_;
-    int tree_size_;
-    int batch_size_;
-    int counter_ = 0;
 
     void enqueue_task(Task task) {
         int worker_id = counter_++ % num_workers_;
@@ -283,16 +283,16 @@ class DecentralizedScheduler {
     }
 
 private:
-    std::vector<std::thread> workers_;
-    std::vector<std::vector<int>> results_;
     int num_workers_;
     int batch_size_;
+    std::vector<std::thread> workers_;
+    std::vector<std::vector<int>> results_;
 
     void worker_loop(int worker_id, int core_id, std::vector<Operation>& operations, FenwickTreeSequential& local_tree) {
         pin_thread_to_core(core_id);
 
         int counter = 0;
-        for (size_t i = 0; i < batch_size_; ++i) {
+        for (size_t i = 0; i < (size_t)batch_size_; ++i) {
             const auto& op = operations[i];
             if (op.command == 'a') {
                 if (counter++ % num_workers_ == worker_id) {
