@@ -6,6 +6,10 @@ set -e
 # Display each command line
 set -x
 
+# Compile
+make clean
+make
+
 echo "Running Fenwick Tree benchmark with centralized scheduler..."
 
 # Add 1 since central scheduler only distributes task

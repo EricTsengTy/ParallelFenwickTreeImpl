@@ -19,7 +19,8 @@ void print_help(int argc, char *argv[]) {
               << "  -s <size>         Total size of data (default: 1048575 = 2^10 - 1)\n"
               << "\n"
               << "Strategies:\n"
-              << "  sequential, lock, pipeline, pipeline-semi-static, pipeline-aggregate, lazy,\n"
+              << "  sequential, lock,\n"
+              << "  pipeline-fixed-size, pipeline-access-aware, pipeline-semi-static, pipeline-aggregate, lazy,\n"
               << "  central_scheduler, lockfree_scheduler, pure_parallel, query_percentage_lazy,\n"
               << "  query_percentage_pure\n"
               << "\n"
@@ -163,8 +164,38 @@ int main(int argc, char* argv[]) {
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
 
-    } else if (strategy == "pipeline") {
+    } else if (strategy == "pipeline-fixed-size") {
         FenwickTreePipeline fenwick_tree(size, omp_get_max_threads());
+
+        std::chrono::microseconds generating_duration(0);
+        auto start_time = std::chrono::steady_clock::now();
+
+        for (size_t batch_start = 0; batch_start < num_operations; batch_start += batch_size) {
+            auto generating_start_time = std::chrono::steady_clock::now();
+            for (size_t i = 0; i < batch_size; ++i) {
+                operations[i] = generator.next();
+            }
+            auto generating_end_time = std::chrono::steady_clock::now();
+            generating_duration += std::chrono::duration_cast<std::chrono::microseconds>(
+                generating_end_time - generating_start_time
+            );
+
+            fenwick_tree.batchAdd(operations);
+        }
+        
+        auto end_time = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+
+        std::cout << "Performance:" << std::endl;
+        std::cout << "Total operations: " << num_operations << std::endl;
+        std::cout << "Total execution time: " << duration.count() << " microseconds" << std::endl;
+        std::cout << "Total data generating time: " << generating_duration.count() << " microseconds" << std::endl;
+        std::cout << "Total computation time: " << (duration - generating_duration).count() << " microseconds" << std::endl;
+        std::cout << "Batch computation time: " << (duration - generating_duration).count() / num_batches << " microseconds" << std::endl;
+        std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
+        std::cout << std::endl;
+    } else if (strategy == "pipeline-access-aware") {
+        FenwickTreePipelineAccessAware fenwick_tree(size, omp_get_max_threads());
 
         std::chrono::microseconds generating_duration(0);
         auto start_time = std::chrono::steady_clock::now();
