@@ -19,14 +19,14 @@ void print_help(int argc, char *argv[]) {
               << "  -s <size>         Total size of data (default: 1048575 = 2^10 - 1)\n"
               << "\n"
               << "Strategies:\n"
-              << "  sequential, lock, pipeline-fixed-size, pipeline-access-aware, \n"
-              << "  pipeline-semi-static, pipeline-aggregate, lazy, central_scheduler, \n"
+              << "  sequential, lock, model-parallel-fixed-size, model-parallel-access-aware, \n"
+              << "  model-parallel-semi-static, model-parallel-aggregate, lazy, central_scheduler, \n"
               << "  lockfree_scheduler, pure_parallel, query_percentage_lazy, \n"
               << "  query_percentage_pure\n"
               << "\n"
               << "Examples:\n"
-              << "  " << argv[0] << " -t parallel -p 4 -b 8192 -n 512 -s 2097152\n"
-              << "  " << argv[0] << " -t pipeline -p 8 -b 8192 -n 2048 -s 2097152\n";
+              << "  " << argv[0] << " -t model-parallel-fixed-size -p 4 -b 8192 -n 512 -s 2097152\n"
+              << "  " << argv[0] << " -t model-parallel-access-aware -p 8 -b 8192 -n 2048 -s 2097152\n";
     
     exit(1);  // Exit with error code
 }
@@ -38,9 +38,9 @@ std::unique_ptr<FenwickTreeBase> CreateFenwickTree(const std::string& type, int 
     if (type == "lock") {
         return std::make_unique<FenwickTreeLocked>(n);
     }
-    if (type == "pipeline") {
+    if (type == "model-parallel") {
         omp_set_num_threads(num_threads);
-        return std::make_unique<FenwickTreePipeline>(n, omp_get_max_threads());
+        return std::make_unique<FenwickTreeModelParallel>(n, omp_get_max_threads());
     }
     if (type == "lazy") {
         return std::make_unique<FenwickTreeLSync>(n);
@@ -164,8 +164,8 @@ int main(int argc, char* argv[]) {
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
 
-    } else if (strategy == "pipeline-fixed-size") {
-        FenwickTreePipeline fenwick_tree(size, omp_get_max_threads());
+    } else if (strategy == "model-parallel-fixed-size") {
+        FenwickTreeModelParallel fenwick_tree(size, omp_get_max_threads());
 
         std::chrono::microseconds generating_duration(0);
         auto start_time = std::chrono::steady_clock::now();
@@ -194,8 +194,8 @@ int main(int argc, char* argv[]) {
         std::cout << "Batch computation time: " << (duration - generating_duration).count() / num_batches << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
-    } else if (strategy == "pipeline-access-aware") {
-        FenwickTreePipelineAccessAware fenwick_tree(size, omp_get_max_threads());
+    } else if (strategy == "model-parallel-access-aware") {
+        FenwickTreeModelParallelAccessAware fenwick_tree(size, omp_get_max_threads());
 
         std::chrono::microseconds generating_duration(0);
         auto start_time = std::chrono::steady_clock::now();
@@ -224,8 +224,8 @@ int main(int argc, char* argv[]) {
         std::cout << "Batch computation time: " << (duration - generating_duration).count() / num_batches << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
-    } else if (strategy == "pipeline-semi-static") {
-        FenwickTreePipelineSemiStatic fenwick_tree(size, omp_get_max_threads());
+    } else if (strategy == "model-parallel-semi-static") {
+        FenwickTreeModelParallelSemiStatic fenwick_tree(size, omp_get_max_threads());
 
         std::chrono::microseconds generating_duration(0);
         auto start_time = std::chrono::steady_clock::now();
@@ -254,8 +254,8 @@ int main(int argc, char* argv[]) {
         std::cout << "Batch computation time: " << (duration - generating_duration).count() / num_batches << " microseconds" << std::endl;
         std::cout << "Average time per operation: " << (duration.count() / num_operations) << " microseconds" << std::endl;
         std::cout << std::endl;
-    } else if (strategy == "pipeline-aggregate") {
-        FenwickTreePipelineAggregate fenwick_tree(size, omp_get_max_threads());
+    } else if (strategy == "model-parallel-aggregate") {
+        FenwickTreeModelParallelAggregate fenwick_tree(size, omp_get_max_threads());
 
         std::chrono::microseconds generating_duration(0);
         auto start_time = std::chrono::steady_clock::now();

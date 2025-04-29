@@ -93,8 +93,8 @@ class FenwickTreeLocked : public FenwickTreeBase {
     }
 };
 
-// Pipeline Fenwick Tree - Fixed Size
-class FenwickTreePipeline : public FenwickTreeBase {
+// Model-Parallel Fenwick Tree - Fixed Size
+class FenwickTreeModelParallel : public FenwickTreeBase {
   private:
     int num_threads;
     std::vector<int> bits;
@@ -137,7 +137,7 @@ class FenwickTreePipeline : public FenwickTreeBase {
     }
 
   public:
-    FenwickTreePipeline(int n, int num_threads):
+    FenwickTreeModelParallel(int n, int num_threads):
         num_threads(num_threads),
         bits(n + 1, 0), 
         ranges(num_threads), 
@@ -219,8 +219,8 @@ class FenwickTreePipeline : public FenwickTreeBase {
     }
 };
 
-// Pipeline Fenwick Tree - Access Aware
-class FenwickTreePipelineAccessAware : public FenwickTreeBase {
+// Model-Parallel Fenwick Tree - Access Aware
+class FenwickTreeModelParallelAccessAware : public FenwickTreeBase {
   private:
     int num_threads;
     std::vector<int> bits;
@@ -266,7 +266,7 @@ class FenwickTreePipelineAccessAware : public FenwickTreeBase {
     }
 
   public:
-    FenwickTreePipelineAccessAware(int n, int num_threads):
+    FenwickTreeModelParallelAccessAware(int n, int num_threads):
         num_threads(num_threads),
         bits(n + 1, 0), 
         ranges(num_threads), 
@@ -348,8 +348,8 @@ class FenwickTreePipelineAccessAware : public FenwickTreeBase {
     }
 };
 
-// Pipeline Fenwick Tree
-class FenwickTreePipelineSemiStatic : FenwickTreeBase {
+// Model-Parallel Fenwick Tree
+class FenwickTreeModelParallelSemiStatic : FenwickTreeBase {
   private:
     int num_threads;
     std::vector<int> bits;
@@ -398,7 +398,7 @@ class FenwickTreePipelineSemiStatic : FenwickTreeBase {
     }
 
   public:
-    FenwickTreePipelineSemiStatic(int n, int num_threads, int step = 127):
+    FenwickTreeModelParallelSemiStatic(int n, int num_threads, int step = 127):
         num_threads(num_threads),
         bits(n + 1, 0), 
         ranges(num_threads), 
@@ -507,8 +507,8 @@ class FenwickTreePipelineSemiStatic : FenwickTreeBase {
     }
 };
 
-// Pipeline Fenwick Tree
-class FenwickTreePipelineAggregate : FenwickTreeBase {
+// Model-Parallel Fenwick Tree
+class FenwickTreeModelParallelAggregate : FenwickTreeBase {
   private:
     int num_threads;
     std::vector<int> bits;
@@ -551,7 +551,7 @@ class FenwickTreePipelineAggregate : FenwickTreeBase {
     }
 
   public:
-    FenwickTreePipelineAggregate(int n, int num_threads):
+    FenwickTreeModelParallelAggregate(int n, int num_threads):
         num_threads(num_threads),
         bits(n + 1, 0), 
         local_bits(n + 1, 0),
@@ -671,7 +671,7 @@ class FenwickTreeLSync : public FenwickTreeBase {
     }
 };
 
-// Lazy Sync Fenwick Tree but within (like Pipeline); still under construction
+// Lazy Sync Fenwick Tree but within (like Model-Parallel); still under construction
 // Many implementations: 
 class FenwickTreeLWithin : public FenwickTreeBase {
     private:
