@@ -166,6 +166,10 @@ class FenwickTreePipeline : FenwickTreeBase {
             int t = omp_get_thread_num();
             const auto [lower, upper] = ranges[t];
 
+            #ifdef TIMING
+            auto start_time = omp_get_wtime();
+            #endif
+
             for (const auto &operation : operations) {
                 int x = operation.index + 1;
                 int val = operation.value;
@@ -195,6 +199,11 @@ class FenwickTreePipeline : FenwickTreeBase {
                     bits[x] += val;
                 }
             }
+
+            #ifdef TIMING
+            auto end_time = omp_get_wtime();
+            execution_times[t] += end_time - start_time;
+            #endif
         }
     }
 
@@ -205,20 +214,9 @@ class FenwickTreePipeline : FenwickTreeBase {
     }
 
     void statistics() {
-        std::vector<std::pair<int, int>> values;
-        long total = 0;
-        for (int i = 1; i < (int)bits.size(); ++i) {
-            values.emplace_back(bits[i], i);
-            total += (long) bits[i];
+        for (auto time : execution_times) {
+            std::cerr << time << '\n';
         }
-
-        std::sort(values.begin(), values.end(), std::greater<std::pair<int, int>>());
-        for (int i = 0; i < (int)values.size() && i < 20; ++i) {
-            std::cerr << values[i].second << ' ' << values[i].first << '\n';
-        }
-
-        std::cerr << "Total: " << total << '\n';
-        std::cerr << "Average: " << (double)total / bits.size() << '\n';
     }
 };
 
@@ -303,6 +301,9 @@ class FenwickTreePipelineSemiStatic : FenwickTreeBase {
 
             // Add a barrier for more accurate estimation of execution time
             #pragma omp barrier
+            #ifdef TIMING
+            auto start_time = omp_get_wtime();
+            #endif
             for (const auto &operation : operations) {
                 int x = operation.index + 1;
                 int val = operation.value;
@@ -332,6 +333,11 @@ class FenwickTreePipelineSemiStatic : FenwickTreeBase {
                     bits[x] += val;
                 }
             }
+
+            #ifdef TIMING
+            auto end_time = omp_get_wtime();
+            execution_times[t] += end_time - start_time;
+            #endif
             
             // Semi-static scheduling: adjust ranges based on the execution results
             #pragma omp single nowait
@@ -367,20 +373,9 @@ class FenwickTreePipelineSemiStatic : FenwickTreeBase {
     }
 
     void statistics() {
-        std::vector<std::pair<int, int>> values;
-        long total = 0;
-        for (int i = 1; i < (int)bits.size(); ++i) {
-            values.emplace_back(bits[i], i);
-            total += (long) bits[i];
+        for (auto time : execution_times) {
+            std::cerr << time << '\n';
         }
-
-        std::sort(values.begin(), values.end(), std::greater<std::pair<int, int>>());
-        for (int i = 0; i < (int)values.size() && i < 20; ++i) {
-            std::cerr << values[i].second << ' ' << values[i].first << '\n';
-        }
-
-        std::cerr << "Total: " << total << '\n';
-        std::cerr << "Average: " << (double)total / bits.size() << '\n';
     }
 };
 
@@ -457,6 +452,9 @@ class FenwickTreePipelineAggregate : FenwickTreeBase {
             int t = omp_get_thread_num();
             const auto [lower, upper] = ranges[t];
 
+            #ifdef TIMING
+            auto start_time = omp_get_wtime();
+            #endif
             for (const auto &operation : operations) {
                 int x = operation.index + 1;
                 int val = operation.value;
@@ -496,6 +494,11 @@ class FenwickTreePipelineAggregate : FenwickTreeBase {
                 bits[x] += val_agg;
                 local_bits[x] = 0;
             }
+
+            #ifdef TIMING
+            auto end_time = omp_get_wtime();
+            execution_times[t] += end_time - start_time;
+            #endif
         }
     }
 
@@ -506,20 +509,9 @@ class FenwickTreePipelineAggregate : FenwickTreeBase {
     }
 
     void statistics() {
-        std::vector<std::pair<int, int>> values;
-        long total = 0;
-        for (int i = 1; i < (int)bits.size(); ++i) {
-            values.emplace_back(bits[i], i);
-            total += (long) bits[i];
+        for (auto time : execution_times) {
+            std::cerr << time << '\n';
         }
-
-        std::sort(values.begin(), values.end(), std::greater<std::pair<int, int>>());
-        for (int i = 0; i < (int)values.size() && i < 20; ++i) {
-            std::cerr << values[i].second << ' ' << values[i].first << '\n';
-        }
-
-        std::cerr << "Total: " << total << '\n';
-        std::cerr << "Average: " << (double)total / bits.size() << '\n';
     }
 };
 
