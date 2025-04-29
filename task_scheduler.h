@@ -1,8 +1,8 @@
 /**
- * Centralized scheduler that distribute tasks to all workers. 
+ * Centralized scheduler that distribute tasks to all workers.
+ * The scheduler thread is dedicated to launching the task only.
  * For each update task, a worker will be assigned to do the work. 
- * For each query task, all worker will be assigned to write back the result to the scheduler. 
- * The scheduler should also try to take work as possible
+ * For each query task, all worker will be assigned to write back the result to the scheduler.
  */
 #ifndef TASK_SCHEDULER_H
 #define TASK_SCHEDULER_H
@@ -15,8 +15,8 @@
 #include <condition_variable>
 #include <atomic>
 #include <functional>
-#include <pthread.h>  // for pthread_setaffinity_np
-#include <sched.h>    // for CPU_SET, cpu_set_t
+#include <pthread.h>
+#include <sched.h>
 
 #include "fenwick.h"
 #include "readerwriterqueue.h"
@@ -259,6 +259,9 @@ class DecentralizedScheduler {
         std::vector<Operation>& operations, std::vector<FenwickTreeSequential>& local_trees)
         : num_workers_(num_workers), batch_size_(batch_size), results_(batch_size) {
         for (int i = 0; i < num_workers_; ++i) {
+            results_[i] = std::vector<int>(batch_size_);
+        }
+        for (int i = 0; i < num_workers_; ++i) {
             workers_.emplace_back(&DecentralizedScheduler::worker_loop, this, i, i+1, std::ref(operations), std::ref(local_trees[i]));
         }
     }
@@ -271,15 +274,17 @@ class DecentralizedScheduler {
 
     int validate_sum() {
         int res = 0;
-        for (int i = 0; i < batch_size_; i++) {
-            res += results_[i].load();
+        for (int i = 0; i < num_workers_; i++) {
+            for (int j = 0; j < batch_size_; j++) {
+                res += results_[i][j];
+            }
         }
         return res;
     }
 
 private:
     std::vector<std::thread> workers_;
-    std::vector<std::atomic<int>> results_;
+    std::vector<std::vector<int>> results_;
     int num_workers_;
     int batch_size_;
 
@@ -294,8 +299,7 @@ private:
                     local_tree.add(op.index, op.value);
                 }
             } else {
-                int result = local_tree.sum(op.index);
-                results_[i].fetch_add(result, std::memory_order_relaxed);
+                results_[worker_id][i] = local_tree.sum(op.index);
             }
         }
     }
