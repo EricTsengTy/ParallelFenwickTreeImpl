@@ -22,7 +22,7 @@ class Generator {
     }
 
     Operation next() {
-        std::uniform_int_distribution<int> op_dist(1, 100);             // For operation type
+        std::uniform_int_distribution<int> op_dist(1, 1000);             // For operation type
         std::uniform_int_distribution<int> index_dist(0, size - 1);     // For index
         std::uniform_int_distribution<int> value_dist(1, 100);          // For value
 
