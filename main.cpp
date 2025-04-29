@@ -429,7 +429,7 @@ int main(int argc, char* argv[]) {
         std::unique_ptr<FenwickTreeBase> base_tree = CreateFenwickTree(base_strategy, size, num_threads);
         std::vector<FenwickTreeSequential> local_trees;
         local_trees.reserve(num_threads - 1);
-        for (int i = 0; i < num_threads; ++i) {
+        for (size_t i = 0; i < num_threads; ++i) {
             local_trees.emplace_back(FenwickTreeSequential(size));
         }
 
@@ -540,7 +540,7 @@ int main(int argc, char* argv[]) {
             std::unique_ptr<FenwickTreeBase> base_tree = CreateFenwickTree(base_strategy, size, num_threads);
             std::vector<FenwickTreeSequential> local_trees;
             local_trees.reserve(num_threads - 1);
-            for (int i = 0; i < num_threads; ++i) {
+            for (size_t i = 0; i < num_threads; ++i) {
                 local_trees.emplace_back(FenwickTreeSequential(size));
             }
     
