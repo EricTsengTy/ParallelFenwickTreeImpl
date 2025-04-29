@@ -1,9 +1,9 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -O2 -fopenmp
+CXXFLAGS = -std=c++17 -Wall -O3 -fopenmp -m64 -I. -Wextra
 
 all: fenwick
 
-fenwick: main.cpp fenwick.h
+fenwick: main.cpp fenwick.h task_scheduler.h readerwriterqueue.h atomicops.h
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 run: fenwick
