@@ -1,7 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Set script to stop if any command fails
 set -e
+
+# Display each command line
+set -x
 
 echo "Running Fenwick Tree benchmark with centralized scheduler..."
 
